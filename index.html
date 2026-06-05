@@ -558,6 +558,7 @@
       }
     }
 
+// 5. Event Listener untuk Tombol Analisis Kesehatan Berbasis Server (Aman)
     btnAnalyze.addEventListener('click', async () => {
       const userSymptom = symptomTextarea.value.trim();
 
@@ -566,48 +567,23 @@
         return;
       }
 
+      // Mengubah status tombol menjadi Loading
       btnAnalyze.disabled = true;
       btnAnalyze.innerText = 'Menganalisis...';
-      aiResponseContainer.innerHTML = '<p class="ai-placeholder-text">Sedang memproses data jadwal dan keluhan Anda...</p>';
+      aiResponseContainer.innerHTML = '<p class="ai-placeholder-text">Sedang memproses data jadwal dan keluhan Anda di server...</p>';
 
       try {
-        const apiKey = 'AIzaSyAUKjXX2-OX45FV5So2UUfDluwUwpu17HE'; 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-
-        const systemInstruction = `Role: Anda adalah asisten kesehatan proaktif dan analis jadwal.
-Context Rules: Analisis keluhan pengguna berikut dengan mempertimbangkan jadwal harian mereka yang dinilai berkategori "${scheduleData.status}". Jangan pernah mendiagnosis penyakit secara pasti. Berikan saran manajemen waktu dan istirahat.
-Output Format: Kembalikan format dalam HTML (gunakan tag seperti <ul>, <li>, atau <strong>) yang merangkum 3 poin berikut secara rapi dan profesional:
-1. Analisis beban kerja harian.
-2. Kemungkinan penyebab gejala (secara umum, hindari diagnosis mutlak).
-3. Rekomendasi tindakan praktis atau penyesuaian jadwal istirahat.
-Catatan: Hanya kembalikan kode HTML yang siap dirender, tanpa pembungkus blok markdown seperti \`\`\`html ... \`\`\``;
-
-        const scheduleString = JSON.stringify(scheduleData, null, 2);
-        const promptText = `
-${systemInstruction}
-
-DATA INPUT PENGGUNA:
-Jadwal Hari Ini:
-${scheduleString}
-
-Keluhan Fisik:
-"${userSymptom}"
-`;
-
-        const payload = {
-          contents: [{
-            parts: [{
-              text: promptText
-            }]
-          }]
-        };
-
-        const response = await fetch(url, {
+        // Cukup panggil URL Web App Apps Script Anda (Satu pintu data)
+        const response = await fetch(googleWebAppUrl, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'text/plain' // Menggunakan text/plain untuk menghindari kendala CORS preflight browser
           },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({
+            input_gejala: userSymptom,
+            schedule_status: scheduleData.status,
+            schedule_activities: scheduleData.activities
+          })
         });
 
         if (!response.ok) {
@@ -615,29 +591,21 @@ Keluhan Fisik:
         }
 
         const data = await response.json();
-        let aiTextResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
-        if (aiTextResponse) {
-          aiTextResponse = aiTextResponse.replace(/```html|```/gi, '').trim();
-          
-          aiResponseContainer.innerHTML = aiTextResponse;
-
-          // PERBAIKAN FILTER: Bersihkan tag HTML menjadi teks polos khusus untuk database Google Sheets
-          const cleanTextForSheets = aiTextResponse.replace(/<[^>]*>?/gm, '');
-
-          // Kirim data yang sudah dibersihkan ke log database
-          saveToGoogleSheets(userSymptom, cleanTextForSheets);
-
+        if (data.status === 'success') {
+          // Menampilkan hasil analisis HTML yang dikirim balik oleh server Apps Script
+          aiResponseContainer.innerHTML = data.ai_response;
+          console.log(`Analisis selesai. Log tercatat aman di database dengan ID: ${data.id_log}`);
         } else {
-          aiResponseContainer.innerHTML = '<p class="ai-placeholder-text">Sistem tidak berhasil menghasilkan analisis. Silakan coba kembali.</p>';
+          throw new Error(data.message);
         }
 
       } catch (error) {
-        console.error('Kesalahan saat menghubungi Gemini API:', error);
+        console.error('Kesalahan saat menghubungi Server Aplikasi:', error);
         aiResponseContainer.innerHTML = `
           <div style="color: var(--danger); font-size: 0.875rem;">
             <strong>Gagal Memuat Analisis</strong><br>
-            Terjadi kendala saat menghubungi asisten AI. Silakan coba beberapa saat lagi.
+            Terjadi kendala keamanan atau jaringan saat memproses data di server. Silakan coba beberapa saat lagi.
           </div>
         `;
       } finally {

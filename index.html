@@ -592,12 +592,16 @@
 
         const data = await response.json();
 
-        if (data.status === 'success') {
-          // Menampilkan hasil analisis HTML yang dikirim balik oleh server Apps Script
+        // PERBAIKAN DI SINI: Langsung ambil data 'ai_response' dari server
+        if (data.status === 'success' && data.ai_response) {
+          
+          // Menampilkan hasil analisis HTML yang sudah jadi dari server
           aiResponseContainer.innerHTML = data.ai_response;
-          console.log(`Analisis selesai. Log tercatat aman di database dengan ID: ${data.id_log}`);
+          
+          console.log(`Analisis selesai. ID Log: ${data.id_log}`);
+
         } else {
-          throw new Error(data.message);
+          throw new Error(data.message || 'Gagal menerima respon dari asisten AI.');
         }
 
       } catch (error) {
